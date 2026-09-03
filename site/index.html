@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Verify a cryptographically signed personal message.">
+    <title>Personal message verifier</title>
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get("scoutTheme");
+        const theme =
+          param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --cp-bg: #f7f4ef;
+        --cp-bg-elevated: #fcfbf8;
+        --cp-surface: #ffffff;
+        --cp-surface-soft: #f5f5f5;
+        --cp-border: #dedede;
+        --cp-border-strong: #919191;
+        --cp-text: #242424;
+        --cp-text-muted: #5c5c5c;
+        --cp-text-soft: #6f6f6f;
+        --cp-accent: #b11f4b;
+        --cp-accent-hover: #9a1a41;
+        --cp-accent-soft: rgba(177, 31, 75, 0.08);
+        --cp-accent-fg: #ffffff;
+        --cp-success: #16a34a;
+        --cp-danger: #dc2626;
+        --cp-warning: #f59e0b;
+        --cp-link: #0078d4;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+        --cp-overlay: rgba(255, 255, 255, 0.8);
+        --cp-panel: rgba(255, 255, 255, 0.86);
+        --cp-panel-strong: rgba(255, 255, 255, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.55);
+        --cp-highlight: rgba(177, 31, 75, 0.12);
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --cp-bg: #3d3b3a;
+        --cp-bg-elevated: #343231;
+        --cp-surface: #292929;
+        --cp-surface-soft: #2e2e2e;
+        --cp-border: #474747;
+        --cp-border-strong: #5f5f5f;
+        --cp-text: #dedede;
+        --cp-text-muted: #919191;
+        --cp-text-soft: #b0b0b0;
+        --cp-accent: #fd8ea1;
+        --cp-accent-hover: #fb7b91;
+        --cp-accent-soft: rgba(253, 142, 161, 0.14);
+        --cp-accent-fg: #1a1a1a;
+        --cp-success: #4ade80;
+        --cp-danger: #f87171;
+        --cp-warning: #fbbf24;
+        --cp-link: #4da6ff;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+        --cp-overlay: rgba(41, 41, 41, 0.88);
+        --cp-panel: rgba(41, 41, 41, 0.72);
+        --cp-panel-strong: rgba(41, 41, 41, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.04);
+        --cp-highlight: rgba(253, 142, 161, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: var(--cp-bg);
+        color: var(--cp-text);
+        font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      header,
+      footer {
+        width: min(100% - 32px, 760px);
+        margin-inline: auto;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-block: 28px 20px;
+        color: var(--cp-text-muted);
+        font-size: 0.925rem;
+      }
+
+      .mark {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--cp-border);
+        border-radius: 0.625rem;
+        background: var(--cp-surface);
+        color: var(--cp-accent);
+        font-weight: 700;
+      }
+
+      main {
+        width: min(100% - 32px, 760px);
+        margin: auto;
+        padding-block: 24px 56px;
+      }
+
+      .card {
+        overflow: hidden;
+        border: 1px solid var(--cp-border);
+        border-radius: 16px;
+        background: var(--cp-surface);
+        box-shadow: var(--cp-shadow);
+      }
+
+      .status-line {
+        height: 4px;
+        background: var(--cp-border-strong);
+      }
+
+      [data-state="valid"] .status-line {
+        background: var(--cp-success);
+      }
+
+      [data-state="invalid"] .status-line {
+        background: var(--cp-danger);
+      }
+
+      [data-state="working"] .status-line {
+        background: var(--cp-warning);
+      }
+
+      .content {
+        padding: clamp(28px, 6vw, 52px);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 10px;
+        border: 1px solid var(--cp-border);
+        border-radius: 0.625rem;
+        background: var(--cp-surface-soft);
+        color: var(--cp-text-muted);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      [data-state="valid"] .badge {
+        border-color: var(--cp-success);
+        color: var(--cp-success);
+      }
+
+      [data-state="invalid"] .badge {
+        border-color: var(--cp-danger);
+        color: var(--cp-danger);
+      }
+
+      h1 {
+        max-width: 620px;
+        margin: 24px 0 12px;
+        font-size: clamp(1.75rem, 5vw, 2.75rem);
+        line-height: 1.12;
+        letter-spacing: -0.035em;
+      }
+
+      .detail {
+        max-width: 590px;
+        margin: 0;
+        color: var(--cp-text-muted);
+        font-size: 1.05rem;
+        line-height: 1.6;
+      }
+
+      .message {
+        margin: 36px 0 0;
+        padding: 24px;
+        border-left: 4px solid var(--cp-accent);
+        border-radius: 0 0.625rem 0.625rem 0;
+        background: var(--cp-bg-elevated);
+        font-size: clamp(1.1rem, 3vw, 1.35rem);
+        line-height: 1.65;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+
+      .metadata {
+        margin: 20px 0 0;
+        color: var(--cp-text-soft);
+        font-family: Consolas, "Courier New", Courier, monospace;
+        font-size: 0.8rem;
+        line-height: 1.5;
+      }
+
+      footer {
+        padding-block: 20px 28px;
+        border-top: 1px solid var(--cp-border);
+        color: var(--cp-text-soft);
+        font-size: 0.8rem;
+        line-height: 1.5;
+      }
+
+      noscript {
+        display: block;
+        padding: 16px;
+        background: var(--cp-surface);
+        color: var(--cp-danger);
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>This verifier requires JavaScript and the browser Web Crypto API.</noscript>
+    <header>
+      <span class="mark" aria-hidden="true">S</span>
+      <span><strong id="identity">Personal</strong> · cryptographic message verification</span>
+    </header>
+    <main>
+      <article class="card" id="result" data-state="idle" aria-live="polite">
+        <div class="status-line"></div>
+        <div class="content">
+          <span class="badge" id="status-badge">READY</span>
+          <h1 id="result-title">Personal message verifier</h1>
+          <p class="detail" id="result-detail">Open a complete signed link to verify its message.</p>
+          <blockquote class="message" id="message" hidden></blockquote>
+          <p class="metadata" id="metadata" hidden></p>
+        </div>
+      </article>
+    </main>
+    <footer>
+      Verification runs locally in your browser. The signed message is stored in the URL fragment and is not sent to the hosting server by this page.
+    </footer>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+
